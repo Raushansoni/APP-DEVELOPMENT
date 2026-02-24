@@ -1,0 +1,40 @@
+# Android / IntelliJ
+.idea/
+*.iml
+local.properties
+**/.cxx/
+*.orig
+
+# Gradle
+.gradle/
+build/
+**/build/
+captures/
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# APK / AAB outputs
+*.apk
+*.aab
+*.ap_
+*.idsig
+*.apk.idsig
+*.mapping.txt
+
+# Signing
+*.jks
+*.keystore
+*.pem
+*.der
+keystore.properties
+
+# Kotlin / Java
+*.class
+*.log
+hs_err_pid*
+replay_pid*
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini

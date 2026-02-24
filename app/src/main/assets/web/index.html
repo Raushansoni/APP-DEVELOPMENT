@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TaskX | Adaptive Android UI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Roboto+Flex:opsz,wght@8..144,600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@1" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="cinematic-glow glow-left" aria-hidden="true"></div>
+  <div class="cinematic-glow glow-right" aria-hidden="true"></div>
+
+  <main class="app-root" id="appRoot" aria-label="TaskX app">
+    <section class="onboarding-gate" id="onboardingGate" hidden>
+      <div class="onboarding-fallback" id="onboardingFallback" aria-hidden="true"></div>
+      <video class="onboarding-video" id="onboardingVideo" playsinline muted loop></video>
+      <audio id="onboardingMusic" loop preload="none"></audio>
+      <div class="onboarding-overlay" aria-hidden="true"></div>
+
+      <div class="onboarding-card onboarding-intro" id="onboardingIntroPanel">
+        <h2>TaskX Gaming Mode</h2>
+        <p>Each launch loads a random gaming clip. Tap below to get ready.</p>
+        <button class="profile-save onboarding-submit" id="onboardingGetReadyButton" type="button">Get Ready</button>
+      </div>
+
+      <div class="onboarding-card onboarding-login" id="onboardingLoginPanel" hidden>
+        <h2>Login</h2>
+        <p>Enter your name to begin.</p>
+
+        <form id="onboardingNameForm" class="onboarding-form" novalidate>
+          <label for="onboardingNameInput">Name</label>
+          <input id="onboardingNameInput" name="onboardingNameInput" type="text" maxlength="60" autocomplete="name" required>
+
+          <p id="onboardingNameFeedback" class="onboarding-feedback" aria-live="polite"></p>
+          <button class="profile-save onboarding-submit" id="onboardingGetStartedButton" type="submit" disabled>Get Started</button>
+        </form>
+      </div>
+    </section>
+
+    <header class="top-bar">
+      <button class="icon-button" id="drawerToggle" type="button" aria-label="Open navigation drawer">
+        <span class="material-symbols-rounded">menu</span>
+      </button>
+
+      <div class="title-group">
+        <h1>TaskX</h1>
+      </div>
+
+      <button class="icon-button theme-toggle" id="themeToggleButton" type="button" aria-label="Switch to light mode">
+        <span class="material-symbols-rounded" id="themeToggleIcon">light_mode</span>
+      </button>
+    </header>
+
+    <section class="layout">
+      <aside class="nav-drawer" id="navDrawer" aria-label="Navigation drawer">
+        <div class="drawer-header">
+          <button class="drawer-profile" id="drawerProfileButton" type="button" aria-label="Open profile settings">
+            <span class="drawer-profile-avatar" id="drawerProfileAvatar">R</span>
+            <span class="drawer-profile-text">
+              <span class="drawer-profile-name" id="drawerProfileName">Raushan</span>
+              <span class="drawer-profile-meta" id="drawerProfileMeta">Personal Planner</span>
+            </span>
+            <span class="material-symbols-rounded">chevron_right</span>
+          </button>
+        </div>
+
+        <nav class="drawer-menu">
+          <button class="drawer-item learning" type="button" data-drawer-item data-view="learning">
+            <span class="icon-stack">
+              <span class="material-symbols-rounded">menu_book</span>
+              <span class="material-symbols-rounded icon-bulb">emoji_objects</span>
+            </span>
+            <span class="drawer-label">LEARNING</span>
+          </button>
+
+          <button class="drawer-item selected" type="button" data-drawer-item data-view="today">
+            <span class="material-symbols-rounded">today</span>
+            <span class="drawer-label">TODAY</span>
+          </button>
+
+          <button class="drawer-item upcoming" type="button" data-drawer-item data-view="upcoming">
+            <span class="material-symbols-rounded">event_upcoming</span>
+            <span class="drawer-label">UPCOMING</span>
+          </button>
+        </nav>
+
+        <footer class="drawer-footer">
+          <span>Developed by Raushan Soni</span>
+          <span class="material-symbols-rounded" aria-hidden="true">favorite</span>
+        </footer>
+      </aside>
+
+      <div class="drawer-scrim" id="drawerScrim" aria-hidden="true"></div>
+      <div class="profile-scrim" id="profileScrim" aria-hidden="true"></div>
+      <div class="quote-scrim" id="quoteScrim" aria-hidden="true"></div>
+      <div class="task-scrim" id="taskScrim" aria-hidden="true"></div>
+      <div class="confirm-scrim" id="confirmScrim" aria-hidden="true"></div>
+      <div class="rename-scrim" id="renameScrim" aria-hidden="true"></div>
+      <div class="context-menu-scrim" id="contextMenuScrim" aria-hidden="true"></div>
+      <div class="bot-history-scrim" id="botHistoryScrim" aria-hidden="true"></div>
+      <div class="bot-media-scrim" id="botMediaScrim" aria-hidden="true"></div>
+
+      <aside class="profile-sheet" id="profileSheet" aria-label="Profile settings">
+        <header class="profile-head">
+          <h2>Your Profile</h2>
+          <button class="icon-button" id="profileCloseButton" type="button" aria-label="Close profile settings">
+            <span class="material-symbols-rounded">close</span>
+          </button>
+        </header>
+
+        <form id="profileForm" class="profile-form" novalidate>
+          <label for="profileName">Full Name</label>
+          <input id="profileName" name="profileName" type="text" maxlength="60" required>
+
+          <label for="profileAge">Age</label>
+          <input id="profileAge" name="profileAge" type="number" min="1" max="120" inputmode="numeric">
+          <label for="profileEmail">Email</label>
+          <input id="profileEmail" name="profileEmail" type="email" maxlength="120" placeholder="you@example.com">
+
+          <label for="profilePhone">Phone Number</label>
+          <input id="profilePhone" name="profilePhone" type="tel" maxlength="20" placeholder="+1 555 123 4567">
+
+          <label for="profileBirthDate">Date of Birth</label>
+          <input id="profileBirthDate" name="profileBirthDate" type="date">
+
+          <label for="profileCity">City</label>
+          <input id="profileCity" name="profileCity" type="text" maxlength="80">
+
+          <label for="profileAddress">Address</label>
+          <input id="profileAddress" name="profileAddress" type="text" maxlength="140">
+
+          <label for="profileBio">About You</label>
+          <textarea id="profileBio" name="profileBio" rows="3" maxlength="220" placeholder="Short intro"></textarea>
+
+          <label class="profile-switch">
+            <input id="profileLockEnabled" name="profileLockEnabled" type="checkbox">
+            <span>Enable App Password Lock</span>
+          </label>
+
+          <label for="profilePassword">App Password</label>
+          <input id="profilePassword" name="profilePassword" type="password" autocomplete="new-password" maxlength="64" placeholder="Set or update password">
+
+          <label for="profilePasswordConfirm">Confirm Password</label>
+          <input id="profilePasswordConfirm" name="profilePasswordConfirm" type="password" autocomplete="new-password" maxlength="64" placeholder="Re-enter password">
+
+          <p class="profile-hint">Leave password fields empty to keep your current password.</p>
+          <p id="profileFeedback" class="profile-feedback" aria-live="polite"></p>
+
+          <div class="profile-actions">
+            <button class="profile-save" type="submit">Save Profile</button>
+            <button class="profile-reset" id="profileResetButton" type="button">Reset</button>
+          </div>
+        </form>
+      </aside>
+
+      <section class="quote-sheet" id="quoteSheet" aria-label="Add or edit quote">
+        <header class="quote-sheet-head">
+          <h2 id="quoteSheetTitle">Add Quote</h2>
+          <button class="icon-button" id="quoteCloseButton" type="button" aria-label="Close quote editor">
+            <span class="material-symbols-rounded">close</span>
+          </button>
+        </header>
+        <form id="quoteForm" class="quote-form" novalidate>
+          <input id="quoteEditingId" type="hidden">
+
+          <label for="quoteText">Quote Text</label>
+          <textarea id="quoteText" name="quoteText" rows="4" maxlength="400" placeholder="Write your quote..." required></textarea>
+
+          <label for="quoteAuthor">Author</label>
+          <input id="quoteAuthor" name="quoteAuthor" type="text" maxlength="80" placeholder="Optional">
+
+          <div class="quote-form-actions">
+            <button class="profile-save" id="quoteSaveButton" type="submit">Save Quote</button>
+            <button class="profile-reset" id="quoteDeleteButton" type="button" hidden>Delete</button>
+          </div>
+        </form>
+      </section>
+
+
+      <section class="task-sheet" id="taskSheet" aria-label="Add or edit task">
+        <header class="task-sheet-head">
+          <h2 id="taskSheetTitle">Add Task</h2>
+          <button class="icon-button" id="taskCloseButton" type="button" aria-label="Close task editor">
+            <span class="material-symbols-rounded">close</span>
+          </button>
+        </header>
+        <form id="taskForm" class="task-form" novalidate>
+          <input id="taskEditingId" type="hidden">
+
+          <label for="taskTitle">Task Title</label>
+          <input id="taskTitle" name="taskTitle" type="text" maxlength="120" placeholder="Task name" required>
+
+          <label for="taskTime">Time</label>
+          <select id="taskTime" name="taskTime" required></select>
+
+          <label for="taskTag">Category</label>
+          <select id="taskTag" name="taskTag" required>
+            <option value="learning">Learning</option>
+            <option value="work">Work</option>
+            <option value="fitness">Fitness</option>
+            <option value="language">Language</option>
+            <option value="general">General</option>
+          </select>
+
+          <label class="task-switch">
+            <input id="taskCompleted" name="taskCompleted" type="checkbox">
+            <span>Mark as completed</span>
+          </label>
+
+          <div class="task-form-actions">
+            <button class="profile-save" id="taskSaveButton" type="submit">Save Task</button>
+            <button class="profile-reset" id="taskDeleteButton" type="button" hidden>Delete</button>
+          </div>
+        </form>
+      </section>
+
+
+      <section class="confirm-sheet" id="confirmSheet" aria-label="Confirm action" aria-modal="true" role="dialog">
+        <h2 id="confirmTitle">Delete item?</h2>
+        <p id="confirmMessage">This action cannot be undone.</p>
+        <div class="confirm-actions">
+          <button class="profile-reset" id="confirmCancelButton" type="button">Cancel</button>
+          <button class="profile-save confirm-danger" id="confirmAcceptButton" type="button">Delete</button>
+        </div>
+      </section>
+
+      <section class="rename-sheet" id="renameSheet" aria-label="Rename section" aria-modal="true" role="dialog">
+        <h2 id="renameTitle">Rename Section</h2>
+        <p id="renameSubtitle">Update the section name.</p>
+        <form id="renameForm" class="rename-form" novalidate>
+          <label for="renameInput">Name</label>
+          <input id="renameInput" name="renameInput" type="text" maxlength="28" required>
+          <p id="renameFeedback" class="profile-feedback" aria-live="polite"></p>
+          <div class="confirm-actions">
+            <button class="profile-reset" id="renameCancelButton" type="button">Cancel</button>
+            <button class="profile-save" id="renameSaveButton" type="submit">Save</button>
+          </div>
+        </form>
+      </section>
+      <section class="crud-context-menu" id="crudContextMenu" aria-label="Item actions" role="menu">
+        <p class="crud-context-title" id="crudContextTitle">Task actions</p>
+        <p class="crud-context-meta" id="crudContextMeta"></p>
+        <button class="crud-context-item" id="crudEditButton" type="button" data-context-action="edit" role="menuitem">
+          <span class="material-symbols-rounded">edit</span>
+          <span>Edit</span>
+        </button>
+        <button class="crud-context-item" id="crudToggleButton" type="button" data-context-action="toggle" role="menuitem">
+          <span class="material-symbols-rounded">task_alt</span>
+          <span id="crudToggleText">Mark complete</span>
+        </button>
+        <button class="crud-context-item danger" id="crudDeleteButton" type="button" data-context-action="delete" role="menuitem">
+          <span class="material-symbols-rounded">delete</span>
+          <span>Delete</span>
+        </button>
+      </section>
+      <article class="today-view app-view" id="todayView">
+        <div class="today-head">
+          <p class="greeting" id="greetingText">Good morning, Raushan</p>
+          <p class="today-date" id="todayDateText">Saturday, 21 February 2026</p>
+          <p class="today-time" id="todayTimeText">08:00 AM</p>
+        </div>
+
+        <div class="progress-panel">
+          <div class="progress-ring" id="progressRing" style="--progress: 0;">
+            <div class="progress-inner">
+              <strong id="progressValue">0%</strong>
+              <span>complete</span>
+            </div>
+          </div>
+          <div class="progress-copy">
+            <h2>Daily Progress</h2>
+            <p id="progressDetails">0 sessions planned, 0 completed, 0 active.</p>
+          </div>
+        </div>
+
+        <div class="list-wrap">
+          <div class="list-head">
+            <h2>Today</h2>
+            <button class="task-add-button" id="addTaskButton" type="button" aria-label="Add task">
+              <span class="material-symbols-rounded">add</span>
+              <span>Add</span>
+            </button>
+          </div>
+          <p class="today-crud-hint" id="todayCrudHint">Long press a task to manage it.</p>
+          <ul class="schedule-list" id="scheduleList"></ul>
+        </div>
+      </article>
+
+      <article class="learning-view app-view" id="learningView" hidden>
+        <div class="learning-head">
+          <button class="learning-add-fab" id="addLearningSectionButton" type="button" aria-label="Create learning section">
+            <span class="material-symbols-rounded">add</span>
+          </button>
+        </div>
+
+        <div
+          class="quotes-launcher"
+          id="quotesLauncher"
+          role="button"
+          tabindex="0"
+          aria-label="Open quotes section"
+        >
+          <span class="quotes-launcher-bubble bubble-1" aria-hidden="true"></span>
+          <span class="quotes-launcher-bubble bubble-2" aria-hidden="true"></span>
+          <span class="quotes-launcher-bubble bubble-3" aria-hidden="true"></span>
+          <span class="quotes-launcher-bubble bubble-4" aria-hidden="true"></span>
+
+          <div class="quotes-launcher-copy">
+            <h2 id="quotesLauncherTitle">Quote</h2>
+          </div>
+
+          <span class="material-symbols-rounded">chevron_right</span>
+        </div>
+
+        <ul class="learning-section-list" id="learningSectionList"></ul>
+      </article>
+
+      <article class="quotes-view app-view" id="quotesView" hidden>
+        <div class="quotes-display-head">
+          <button class="icon-button quotes-back-button" id="backToLearningButton" type="button" aria-label="Back to learning">
+            <span class="material-symbols-rounded">arrow_back</span>
+          </button>
+          <div>
+            <p class="quotes-panel-kicker" id="quotesPanelKicker">All Quotes</p>
+            <h3 id="quotesPanelTitle">Your learning collection</h3>
+          </div>
+          <button class="icon-button learning-add-button" id="addQuoteButton" type="button" aria-label="Add quote">
+            <span class="material-symbols-rounded">add</span>
+          </button>
+        </div>
+
+        <ul class="quote-list" id="quoteList"></ul>
+      </article>
+
+      <article class="bot-view app-view" id="botView" hidden>
+        <div class="bot-head">
+          <button class="icon-button bot-back-button" id="botBackButton" type="button" aria-label="Back">
+            <span class="material-symbols-rounded">arrow_back</span>
+          </button>
+          <div>
+            <h2>Pikachu</h2>
+            <p>Fresh chat every time. History is always saved.</p>
+          </div>
+          <div class="bot-head-actions">
+            <button class="icon-button bot-history-button" id="botHistoryButton" type="button" aria-label="Open chat history">
+              <span class="material-symbols-rounded">history</span>
+            </button>
+            <button class="icon-button bot-clear-button" id="botClearButton" type="button" aria-label="Clear chat">
+              <span class="material-symbols-rounded">delete_sweep</span>
+            </button>
+          </div>
+        </div>
+
+        <section class="bot-history-sheet" id="botHistorySheet" aria-label="Previous chats" hidden>
+          <header class="bot-history-head">
+            <h3>Chat History</h3>
+            <button class="icon-button" id="botHistoryCloseButton" type="button" aria-label="Close chat history">
+              <span class="material-symbols-rounded">close</span>
+            </button>
+          </header>
+          <ul class="bot-history-list" id="botHistoryList"></ul>
+        </section>
+
+        <section class="bot-settings-card" aria-label="Bot settings">
+          <form class="bot-settings-form" id="botSettingsForm" novalidate>
+            <label for="botProvider">Provider</label>
+            <select id="botProvider" name="botProvider">
+              <option value="ollama">Ollama (Local, Free)</option>
+              <option value="huggingface">Hugging Face (Free Token)</option>
+            </select>
+
+            <label for="botModel">Model</label>
+            <input id="botModel" name="botModel" type="text" maxlength="120" placeholder="llama3.2:3b" required>
+
+            <label for="botEndpoint">Endpoint URL</label>
+            <input id="botEndpoint" name="botEndpoint" type="url" maxlength="240" placeholder="http://10.0.2.2:11434/api/chat" required>
+
+            <label for="botApiKey">API Key (if required)</label>
+            <input id="botApiKey" name="botApiKey" type="password" maxlength="220" autocomplete="off" placeholder="Optional for Ollama">
+
+            <p id="botProviderHint" class="profile-hint"></p>
+            <p id="botSettingsFeedback" class="profile-feedback" aria-live="polite"></p>
+
+            <div class="bot-settings-actions">
+              <button class="profile-save" type="submit">Save Bot Settings</button>
+              <button class="profile-reset" id="botResetSettingsButton" type="button">Reset</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="bot-chat-card" aria-label="Bot chat">
+          <ul class="bot-message-list" id="botMessageList"></ul>
+
+          <form class="bot-composer-form" id="botComposerForm" novalidate>
+            <label class="sr-only" for="botPromptInput">Message</label>
+            <div class="bot-composer-shell">
+              <div class="bot-attachment-preview" id="botAttachmentPreview" hidden>
+                <img class="bot-attachment-thumb" id="botAttachmentThumb" alt="Attachment preview" hidden>
+                <div class="bot-attachment-meta">
+                  <strong id="botAttachmentName">Attachment</strong>
+                  <span id="botAttachmentType">image</span>
+                </div>
+                <button class="bot-attachment-remove" id="botAttachmentRemoveButton" type="button" aria-label="Remove attachment">
+                  <span class="material-symbols-rounded">close</span>
+                </button>
+              </div>
+
+              <textarea id="botPromptInput" name="botPromptInput" rows="1" maxlength="1200" placeholder="Message Pikachu..." required></textarea>
+
+              <input id="botCameraInput" type="file" accept="image/*" capture="environment" hidden>
+              <input id="botGalleryInput" type="file" accept="image/*" hidden>
+              <input id="botGifInput" type="file" accept="image/gif" hidden>
+
+              <button class="bot-send-inline" id="botSendButton" type="submit" aria-label="Send message">
+                <span class="material-symbols-rounded">send</span>
+              </button>
+            </div>
+          </form>
+        </section>
+      </article>
+
+      
+        <section class="bot-media-sheet" id="botMediaSheet" aria-label="Media actions" role="menu" hidden>
+          <p class="bot-media-title">Attach to message</p>
+          <button class="bot-media-action" type="button" data-bot-media-action="camera" role="menuitem">
+            <span class="material-symbols-rounded">photo_camera</span>
+            <span>Capture Picture</span>
+          </button>
+          <button class="bot-media-action" type="button" data-bot-media-action="gallery" role="menuitem">
+            <span class="material-symbols-rounded">image</span>
+            <span>Choose from Gallery</span>
+          </button>
+          <button class="bot-media-action" type="button" data-bot-media-action="gif" role="menuitem">
+            <span class="material-symbols-rounded">gif_box</span>
+            <span>Upload GIF</span>
+          </button>
+          <button class="bot-media-action" type="button" data-bot-media-action="location" role="menuitem">
+            <span class="material-symbols-rounded">my_location</span>
+            <span>Share Location</span>
+          </button>
+          <button class="bot-media-cancel" id="botMediaCancelButton" type="button">Cancel</button>
+        </section>
+      <article class="upcoming-view app-view" id="upcomingView" hidden>
+        <div class="learning-head">
+          <div>
+            <h2>Upcoming</h2>
+            <p>Plan your next sessions here.</p>
+          </div>
+        </div>
+      </article>
+    </section>
+
+
+    <button class="bot-fab" id="botFabButton" type="button" aria-label="Open Pikachu assistant">
+      <span class="material-symbols-rounded">smart_toy</span>
+    </button>
+    <button class="bot-fab-reveal" id="botRevealButton" type="button" aria-label="Show Pikachu assistant">
+      <span class="material-symbols-rounded">smart_toy</span>
+      <span>Bot</span>
+    </button>
+    <nav class="bottom-nav" aria-label="Bottom navigation">
+      <button class="nav-item selected" type="button" data-nav-item data-view="today">
+        <span class="material-symbols-rounded">home</span>
+        <span>Home</span>
+      </button>
+      <button class="nav-item" type="button" data-nav-item data-view="learning">
+        <span class="material-symbols-rounded">task_alt</span>
+        <span>Learning</span>
+      </button>
+    </nav>
+
+  </main>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,122 @@
+plugins {
+  id 'com.android.application'
+  id 'org.jetbrains.kotlin.android'
+}
+
+def localProps = new Properties()
+def localPropsFile = rootProject.file("local.properties")
+if (localPropsFile.exists()) {
+  localPropsFile.withInputStream { localProps.load(it) }
+}
+
+def envOrProp = { String key, String fallback = "" ->
+  def envValue = System.getenv(key)
+  if (envValue != null && !envValue.trim().isEmpty()) {
+    return envValue.trim()
+  }
+  def propValue = localProps.getProperty(key)
+  if (propValue != null && !propValue.trim().isEmpty()) {
+    return propValue.trim()
+  }
+  return fallback
+}
+
+def envVar = { String key -> (System.getenv(key) ?: "").trim() }
+
+def hasReleaseSigning = ["KEYSTORE_PATH", "KEYSTORE_PASSWORD", "KEY_ALIAS", "KEY_PASSWORD"].every { key ->
+  !envVar(key).isEmpty()
+}
+
+android {
+  namespace 'com.taskx.app'
+  compileSdk 35
+
+  defaultConfig {
+    applicationId "com.taskx.app"
+    minSdk 24
+    targetSdk 35
+    versionCode (envOrProp("VERSION_CODE", "2") as Integer)
+    versionName envOrProp("VERSION_NAME", "1.0.0")
+    testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+    buildConfigField "String", "WEB_START_URL", "\"${envOrProp("WEB_START_URL", "file:///android_asset/web/index.html")}\""
+    buildConfigField "String", "API_BASE_URL", "\"${envOrProp("API_BASE_URL", "https://text.pollinations.ai/openai")}\""
+    buildConfigField "boolean", "ENABLE_STRICT_MODE", "true"
+  }
+
+  flavorDimensions += ["env"]
+  productFlavors {
+    dev {
+      dimension "env"
+      applicationIdSuffix ".dev"
+      versionNameSuffix "-dev"
+      buildConfigField "boolean", "LOG_VERBOSE", "true"
+    }
+    prod {
+      dimension "env"
+      buildConfigField "boolean", "LOG_VERBOSE", "false"
+    }
+  }
+
+  signingConfigs {
+    if (hasReleaseSigning) {
+      release {
+        storeFile file(envVar("KEYSTORE_PATH"))
+        storePassword envVar("KEYSTORE_PASSWORD")
+        keyAlias envVar("KEY_ALIAS")
+        keyPassword envVar("KEY_PASSWORD")
+      }
+    }
+  }
+
+  buildTypes {
+    debug {
+      minifyEnabled false
+      shrinkResources false
+      buildConfigField "boolean", "ALLOW_CLEARTEXT", "true"
+    }
+    release {
+      minifyEnabled true
+      shrinkResources true
+      buildConfigField "boolean", "ALLOW_CLEARTEXT", "false"
+      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+      if (hasReleaseSigning) {
+        signingConfig signingConfigs.release
+      }
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = '17'
+  }
+
+  buildFeatures {
+    buildConfig true
+  }
+
+  packaging {
+    resources {
+      excludes += [
+        '/META-INF/{AL2.0,LGPL2.1}',
+        '/META-INF/LICENSE*',
+        '/META-INF/NOTICE*'
+      ]
+    }
+  }
+}
+
+dependencies {
+  implementation 'androidx.core:core-ktx:1.13.1'
+  implementation 'androidx.appcompat:appcompat:1.7.0'
+  implementation 'androidx.activity:activity-ktx:1.9.3'
+  implementation 'com.google.android.material:material:1.12.0'
+  implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+  implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7'
+  implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
+  implementation 'com.jakewharton.timber:timber:5.0.1'
+}
