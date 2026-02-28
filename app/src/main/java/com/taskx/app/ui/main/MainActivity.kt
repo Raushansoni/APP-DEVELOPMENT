@@ -95,6 +95,8 @@ class MainActivity : AppCompatActivity() {
 
     webView = findViewById(R.id.webView)
     configureWebView()
+    webView.clearCache(true)
+    webView.clearHistory()
 
     if (savedInstanceState != null) {
       webView.restoreState(savedInstanceState)

@@ -1,4 +1,5 @@
 (() => {
+  window.__TASKX_BUILD__ = "2026-02-28-live-01";
   const TASK_STORAGE_KEY = "flow_schedule_items_v1";
   const PROFILE_STORAGE_KEY = "taskx_profile_v1";
   const USER_ACCOUNT_STORAGE_KEY = "taskx_user_account_v1";
@@ -32,10 +33,9 @@
     "radial-gradient(135% 125% at 6% 80%, rgba(0, 229, 200, 0.26), rgba(7, 16, 35, 0.98) 56%), linear-gradient(145deg, #091429 0%, #1a1f56 44%, #0f274b 100%)"
   ];
 
-  const OLLAMA_DEFAULT_ENDPOINT = "http://10.0.2.2:11434/api/chat";
-  const HUGGINGFACE_CHAT_ENDPOINT = "https://text.pollinations.ai/openai";
+  const GEMINI_CHAT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
   const BOT_MAX_CONTEXT_MESSAGES = 12;
-  const BOT_FIXED_FREE_API_KEY = 'taskx-free';
+  const BOT_FIXED_FREE_API_KEY = "AIzaSyB0Atad0FOqzeIfp0huF8IW5IyW_EVvv9c";
   const BOT_REQUEST_TIMEOUT_MS = 35000;
   const BOT_REPLY_SOUND_PATH = "media/pikachu_reply.mp3";
   const THEME_REVEAL_DURATION_MS = 170;
@@ -60,6 +60,8 @@
   const TASK_TIMESLOT_STEP_MINUTES = 30;
   const BOT_FAB_AUTO_HIDE_MS = 5600;
   const BOT_SEND_LONG_PRESS_MS = 420;
+  const BOT_MESSAGE_LONG_PRESS_MS = 430;
+  const BOT_MESSAGE_LONG_PRESS_MOVE_PX = 10;
   const TASK_VICTORY_ANIMATION_MS = 860;
   const TASK_TAG_OPTIONS = {
     learning: "Learning",
@@ -139,9 +141,9 @@
   };
 
   const DEFAULT_BOT_SETTINGS = {
-    provider: "huggingface",
-    model: "gpt-oss-20b",
-    endpoint: HUGGINGFACE_CHAT_ENDPOINT,
+    provider: "gemini",
+    model: "gemini-2.5-flash",
+    endpoint: GEMINI_CHAT_ENDPOINT,
     apiKey: BOT_FIXED_FREE_API_KEY,
     systemPrompt: "You are Pikachu. Keep responses concise, practical, and action-oriented for personal scheduling and learning."
   };
@@ -191,6 +193,9 @@
     botSendLongPressTimer: 0,
     botSendLongPressActive: false,
     botAttachment: null,
+    botEditTargetId: "",
+    botMessageLongPress: null,
+    botPromptMenuMessageId: "",
     themeTransitionTimer: 0,
     onboardingVideoUrl: "",
     onboardingMusicUrl: "",
@@ -340,6 +345,8 @@
     botSettingsFeedback: document.getElementById("botSettingsFeedback"),
     botResetSettingsButton: document.getElementById("botResetSettingsButton"),
     botMessageList: document.getElementById("botMessageList"),
+    botPromptMenu: document.getElementById("botPromptMenu"),
+    botPromptMenuEdit: document.getElementById("botPromptMenuEdit"),
     botComposerForm: document.getElementById("botComposerForm"),
     botPromptInput: document.getElementById("botPromptInput"),
     botSendButton: document.getElementById("botSendButton"),
@@ -498,6 +505,13 @@
     dom.botProvider.addEventListener("change", onBotProviderChange);
     dom.botClearButton.addEventListener("click", onBotClearChat);
     dom.botComposerForm.addEventListener("submit", onBotComposerSubmit);
+    dom.botMessageList.addEventListener("click", onBotMessageListClick);
+    dom.botMessageList.addEventListener("pointerdown", onBotMessagePointerDown);
+    dom.botMessageList.addEventListener("pointermove", onBotMessagePointerMove);
+    dom.botMessageList.addEventListener("pointerup", onBotMessagePointerEnd);
+    dom.botMessageList.addEventListener("pointercancel", onBotMessagePointerEnd);
+    dom.botMessageList.addEventListener("contextmenu", onBotMessageContextMenu);
+    document.addEventListener("pointerdown", onGlobalPointerDown, true);
     dom.botPromptInput.addEventListener("keydown", onBotPromptKeyDown);
     dom.botPromptInput.addEventListener("input", autoResizeBotPrompt);
     dom.botPromptInput.addEventListener("focus", autoResizeBotPrompt);
@@ -511,6 +525,7 @@
     dom.botSendButton.addEventListener("pointerleave", onBotSendPointerEnd);
     dom.botSendButton.addEventListener("contextmenu", onBotSendContextMenu);
     dom.botSendButton.addEventListener("click", onBotSendButtonClick);
+    dom.botPromptMenuEdit.addEventListener("click", onBotPromptMenuEditClick);
 
     dom.botMediaCancelButton.addEventListener("click", closeBotMediaSheet);
     dom.botAttachmentRemoveButton.addEventListener("click", clearBotAttachment);
@@ -2803,6 +2818,9 @@
   function startNewBotChatSession() {
     archiveCurrentBotSession();
     state.botMessages = [];
+    state.botEditTargetId = "";
+    closeBotPromptMenu();
+    clearBotMessageLongPressTimer();
     saveBotMessages();
     renderBotMessages();
   }
@@ -2852,9 +2870,8 @@
         const aiBadge = roleClass === "assistant"
           ? '<span class="bot-ai-silhouette" aria-hidden="true"></span>'
           : "";
-
         return `
-          <li class="bot-message ${roleClass} ${message.pending ? "pending" : ""}">
+          <li class="bot-message ${roleClass} ${message.pending ? "pending" : ""}" data-bot-message-id="${escapeHtml(message.id)}">
             <div class="bot-bubble">
               ${aiBadge}
               <p>${safeText}</p>
@@ -2865,6 +2882,170 @@
       .join("");
 
     dom.botMessageList.scrollTop = dom.botMessageList.scrollHeight;
+  }
+
+  function onBotMessageListClick(event) {
+    if (state.botIsSending) {
+      return;
+    }
+
+    const userMessage = event.target.closest(".bot-message.user[data-bot-message-id]");
+    if (!userMessage && !event.target.closest("#botPromptMenu")) {
+      closeBotPromptMenu();
+    }
+  }
+
+  function onBotPromptMenuEditClick() {
+    const messageId = sanitizeText(state.botPromptMenuMessageId);
+    if (!messageId) {
+      return;
+    }
+
+    beginEditBotMessage(messageId);
+    closeBotPromptMenu();
+  }
+
+  function onBotMessagePointerDown(event) {
+    if (!isPrimaryPointer(event) || state.botIsSending) {
+      return;
+    }
+
+    const messageNode = event.target.closest(".bot-message.user[data-bot-message-id]");
+    if (!messageNode) {
+      closeBotPromptMenu();
+      return;
+    }
+
+    const messageId = sanitizeText(messageNode.dataset.botMessageId);
+    if (!messageId) {
+      return;
+    }
+
+    clearBotMessageLongPressTimer();
+    const startX = event.clientX;
+    const startY = event.clientY;
+
+    const timer = window.setTimeout(() => {
+      state.botMessageLongPress = null;
+      openBotPromptMenu(messageId, messageNode);
+      if (navigator.vibrate) {
+        navigator.vibrate(10);
+      }
+    }, BOT_MESSAGE_LONG_PRESS_MS);
+
+    state.botMessageLongPress = {
+      pointerId: event.pointerId,
+      messageId,
+      startX,
+      startY,
+      timer
+    };
+  }
+
+  function onBotMessagePointerMove(event) {
+    const active = state.botMessageLongPress;
+    if (!active || active.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const movedX = Math.abs(event.clientX - active.startX);
+    const movedY = Math.abs(event.clientY - active.startY);
+    if (movedX > BOT_MESSAGE_LONG_PRESS_MOVE_PX || movedY > BOT_MESSAGE_LONG_PRESS_MOVE_PX) {
+      clearBotMessageLongPressTimer();
+    }
+  }
+
+  function onBotMessagePointerEnd(event) {
+    const active = state.botMessageLongPress;
+    if (!active || active.pointerId !== event.pointerId) {
+      return;
+    }
+    clearBotMessageLongPressTimer();
+  }
+
+  function onBotMessageContextMenu(event) {
+    const messageNode = event.target.closest(".bot-message.user[data-bot-message-id]");
+    if (!messageNode) {
+      return;
+    }
+
+    event.preventDefault();
+    const messageId = sanitizeText(messageNode.dataset.botMessageId);
+    if (!messageId) {
+      return;
+    }
+    clearBotMessageLongPressTimer();
+    openBotPromptMenu(messageId, messageNode);
+  }
+
+  function onGlobalPointerDown(event) {
+    if (!dom.botPromptMenu || dom.botPromptMenu.hidden) {
+      return;
+    }
+
+    const inMenu = Boolean(event.target?.closest?.("#botPromptMenu"));
+    const inUserMessage = Boolean(event.target?.closest?.(".bot-message.user[data-bot-message-id]"));
+    if (!inMenu && !inUserMessage) {
+      closeBotPromptMenu();
+    }
+  }
+
+  function clearBotMessageLongPressTimer() {
+    if (!state.botMessageLongPress) {
+      return;
+    }
+    if (state.botMessageLongPress.timer) {
+      window.clearTimeout(state.botMessageLongPress.timer);
+    }
+    state.botMessageLongPress = null;
+  }
+
+  function beginEditBotMessage(messageId) {
+    const message = state.botMessages.find((item) => item.id === messageId && item.role === "user");
+    if (!message) {
+      return;
+    }
+
+    state.botEditTargetId = messageId;
+    dom.botPromptInput.value = message.text;
+    autoResizeBotPrompt();
+    dom.botPromptInput.focus();
+    const end = dom.botPromptInput.value.length;
+    dom.botPromptInput.setSelectionRange(end, end);
+    setBotSettingsFeedback("Editing selected question. Send to replace this point in chat.", "success");
+  }
+
+  function openBotPromptMenu(messageId, anchorNode) {
+    if (!dom.botPromptMenu) {
+      return;
+    }
+
+    state.botPromptMenuMessageId = messageId;
+
+    const rect = anchorNode.getBoundingClientRect();
+    const menuWidth = 132;
+    const menuHeight = 44;
+    const margin = 8;
+    const maxLeft = Math.max(margin, window.innerWidth - menuWidth - margin);
+    const maxTop = Math.max(margin, window.innerHeight - menuHeight - margin);
+    const desiredLeft = rect.right - menuWidth;
+    const desiredTop = rect.top - menuHeight - 6;
+    const left = clampNumber(desiredLeft, margin, maxLeft);
+    const top = clampNumber(desiredTop, margin, maxTop);
+
+    dom.botPromptMenu.style.left = `${left}px`;
+    dom.botPromptMenu.style.top = `${top}px`;
+    dom.botPromptMenu.hidden = false;
+  }
+
+  function closeBotPromptMenu() {
+    state.botPromptMenuMessageId = "";
+    if (!dom.botPromptMenu) {
+      return;
+    }
+    dom.botPromptMenu.hidden = true;
+    dom.botPromptMenu.style.left = "";
+    dom.botPromptMenu.style.top = "";
   }
 
   function onBotPromptKeyDown(event) {
@@ -3170,49 +3351,28 @@
   }
 
   function applyBotSettingsToUI() {
-    dom.botProvider.value = state.botSettings.provider;
+    dom.botProvider.value = "gemini";
     dom.botModel.value = state.botSettings.model;
     dom.botEndpoint.value = state.botSettings.endpoint;
     dom.botApiKey.value = state.botSettings.apiKey;
-    dom.botApiKey.required = state.botSettings.provider === "huggingface";
-    dom.botApiKey.placeholder = state.botSettings.provider === "huggingface" ? "hf_xxx..." : "Optional for Ollama";
-
-    const hint =
-      state.botSettings.provider === "huggingface"
-        ? "Use a Hugging Face token with an open-source model like meta-llama/Llama-3.2-3B-Instruct."
-        : "For Android emulator, run Ollama on your PC and keep endpoint as http://10.0.2.2:11434/api/chat.";
-    dom.botProviderHint.textContent = hint;
+    dom.botApiKey.required = true;
+    dom.botApiKey.placeholder = "AIza...";
+    dom.botProviderHint.textContent = "Using Google Gemini API.";
   }
 
   function onBotProviderChange() {
-    const nextProvider = dom.botProvider.value === "huggingface" ? "huggingface" : "ollama";
-    const previousProvider = state.botSettings.provider;
-    const previousDefaults = getDefaultBotSettingsForProvider(previousProvider);
-    const nextDefaults = getDefaultBotSettingsForProvider(nextProvider);
-
-    const currentModel = sanitizeText(dom.botModel.value);
-    const currentEndpoint = sanitizeText(dom.botEndpoint.value);
-
-    if (!currentModel || currentModel === previousDefaults.model) {
-      dom.botModel.value = nextDefaults.model;
-    }
-    if (!currentEndpoint || currentEndpoint === previousDefaults.endpoint) {
-      dom.botEndpoint.value = nextDefaults.endpoint;
-    }
-
-    dom.botApiKey.required = nextProvider === "huggingface";
-    dom.botApiKey.placeholder = nextProvider === "huggingface" ? "hf_xxx..." : "Optional for Ollama";
-    const hint =
-      nextProvider === "huggingface"
-        ? "Use a Hugging Face token with an open-source model like meta-llama/Llama-3.2-3B-Instruct."
-        : "For Android emulator, run Ollama on your PC and keep endpoint as http://10.0.2.2:11434/api/chat.";
-    dom.botProviderHint.textContent = hint;
+    dom.botProvider.value = "gemini";
+    dom.botModel.value = DEFAULT_BOT_SETTINGS.model;
+    dom.botEndpoint.value = DEFAULT_BOT_SETTINGS.endpoint;
+    dom.botApiKey.required = true;
+    dom.botApiKey.placeholder = "AIza...";
+    dom.botProviderHint.textContent = "Using Google Gemini API.";
   }
 
   function onBotSettingsSubmit(event) {
     event.preventDefault();
 
-    const provider = dom.botProvider.value === "huggingface" ? "huggingface" : "ollama";
+    const provider = "gemini";
     const model = sanitizeText(dom.botModel.value);
     const endpoint = sanitizeText(dom.botEndpoint.value);
     const apiKey = sanitizeText(dom.botApiKey.value);
@@ -3235,8 +3395,8 @@
       return;
     }
 
-    if (provider === "huggingface" && !apiKey) {
-      setBotSettingsFeedback("Hugging Face provider requires an API key.", "error");
+    if (!apiKey) {
+      setBotSettingsFeedback("Gemini API key is required.", "error");
       return;
     }
 
@@ -3290,6 +3450,8 @@
     }
 
     state.botMessages = [];
+    closeBotPromptMenu();
+    clearBotMessageLongPressTimer();
     saveBotMessages();
     renderBotMessages();
     renderBotHistoryList();
@@ -3402,6 +3564,384 @@
     }
   }
 
+  async function tryHandleBotAppAction(rawPrompt) {
+    const prompt = sanitizeText(rawPrompt);
+    if (!prompt) {
+      return { handled: false, reply: "" };
+    }
+
+    const lower = prompt.toLowerCase();
+
+    const navMatch = lower.match(/\b(open|go to|show|switch to)\s+(today|learning|quotes|upcoming|bot|chat)\b/i);
+    if (navMatch) {
+      const target = navMatch[2] === "chat" ? "bot" : navMatch[2];
+      if (target === "quotes") {
+        if (!state.learningSections.length) {
+          return { handled: true, reply: "No Learning section exists yet. Create one first with: Add section <name>." };
+        }
+        setCurrentView("learning");
+        const sectionId = state.activeLearningSectionId || state.learningSections[0].id;
+        openQuotesDisplay(sectionId);
+        return { handled: true, reply: `Opened Quotes in section "${getLearningSectionById(sectionId)?.name || "Section"}".` };
+      }
+
+      if (target === "bot") {
+        openBotDisplay();
+      } else {
+        setCurrentView(target);
+      }
+      return { handled: true, reply: `Opened ${target}.` };
+    }
+
+    const addSection = prompt.match(/^(?:add|create|new)\s+(?:learning\s+)?section\s+(.+)$/i);
+    if (addSection) {
+      const sectionName = sanitizeText(stripOuterQuotes(addSection[1])).slice(0, 28);
+      if (!sectionName) {
+        return { handled: true, reply: "Section name is required." };
+      }
+      if (state.learningSections.some((item) => sanitizeText(item.name).toLowerCase() === sectionName.toLowerCase())) {
+        return { handled: true, reply: `Section "${sectionName}" already exists.` };
+      }
+      const id = `section-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+      const bounds = getLearningSectionBounds();
+      const layout = getDefaultLearningSectionPlacement(state.learningSections.length, bounds);
+      state.learningSections.push({ id, name: sectionName, x: layout.x, y: layout.y, size: layout.size });
+      autoAlignLearningSections(false);
+      saveLearningSections();
+      renderLearningSections();
+      return { handled: true, reply: `Created section "${sectionName}".` };
+    }
+
+    const renameSection = prompt.match(/^rename\s+section\s+(.+?)\s+(?:to|as)\s+(.+)$/i);
+    if (renameSection) {
+      const from = sanitizeText(stripOuterQuotes(renameSection[1]));
+      const to = sanitizeText(stripOuterQuotes(renameSection[2])).slice(0, 28);
+      const section = findLearningSectionByName(from);
+      if (!section) {
+        return { handled: true, reply: `Section "${from}" not found.` };
+      }
+      if (!to) {
+        return { handled: true, reply: "New section name is required." };
+      }
+      section.name = to;
+      saveLearningSections();
+      renderLearningSections();
+      renderQuotes();
+      return { handled: true, reply: `Renamed section "${from}" to "${to}".` };
+    }
+
+    const deleteSection = prompt.match(/^(?:delete|remove)\s+section\s+(.+)$/i);
+    if (deleteSection) {
+      const sectionName = sanitizeText(stripOuterQuotes(deleteSection[1]));
+      const section = findLearningSectionByName(sectionName);
+      if (!section) {
+        return { handled: true, reply: `Section "${sectionName}" not found.` };
+      }
+      removeLearningSectionImmediate(section.id);
+      return { handled: true, reply: `Deleted section "${section.name}".` };
+    }
+
+    const addTask = prompt.match(/^(?:add|create|new)\s+task\b\s*(.+)$/i);
+    if (addTask) {
+      const parsed = parseTaskCreatePayload(addTask[1]);
+      if (!parsed.title) {
+        return { handled: true, reply: "Task title is required. Example: Add task Gym at 10:00-11:00 category fitness" };
+      }
+      const nextId = `task-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+      state.scheduleItems.push({
+        id: nextId,
+        time: parsed.time,
+        title: parsed.title,
+        tag: getTaskTagLabel(parsed.tagClass),
+        tagClass: parsed.tagClass,
+        completed: false
+      });
+      saveScheduleItems();
+      renderSchedule();
+      renderProgress();
+      return { handled: true, reply: `Added task "${parsed.title}" at ${parsed.time}.` };
+    }
+
+    const completeTask = prompt.match(/^(?:complete|finish|done|mark complete)\s+task\s+(.+)$/i);
+    if (completeTask) {
+      const needle = sanitizeText(stripOuterQuotes(completeTask[1]));
+      const task = findTaskByTitle(needle);
+      if (!task) {
+        return { handled: true, reply: `Task "${needle}" not found.` };
+      }
+      if (!task.completed) {
+        task.completed = true;
+        saveScheduleItems();
+        renderSchedule();
+        renderProgress();
+        playTaskVictoryAnimation(task.id);
+      }
+      return { handled: true, reply: `Task "${task.title}" marked complete.` };
+    }
+
+    const deleteTask = prompt.match(/^(?:delete|remove)\s+task\s+(.+)$/i);
+    if (deleteTask) {
+      const needle = sanitizeText(stripOuterQuotes(deleteTask[1]));
+      const task = findTaskByTitle(needle);
+      if (!task) {
+        return { handled: true, reply: `Task "${needle}" not found.` };
+      }
+      await removeTask(task.id, true);
+      return { handled: true, reply: `Deleted task "${task.title}".` };
+    }
+
+    const renameTask = prompt.match(/^rename\s+task\s+(.+?)\s+(?:to|as)\s+(.+)$/i);
+    if (renameTask) {
+      const oldName = sanitizeText(stripOuterQuotes(renameTask[1]));
+      const nextName = sanitizeText(stripOuterQuotes(renameTask[2]));
+      const task = findTaskByTitle(oldName);
+      if (!task) {
+        return { handled: true, reply: `Task "${oldName}" not found.` };
+      }
+      if (!nextName) {
+        return { handled: true, reply: "New task name is required." };
+      }
+      task.title = nextName;
+      saveScheduleItems();
+      renderSchedule();
+      return { handled: true, reply: `Renamed task to "${nextName}".` };
+    }
+
+    const addQuote = prompt.match(/^(?:add|create|write)\s+quote\s+(.+)$/i);
+    if (addQuote) {
+      const parsed = parseQuoteCreatePayload(addQuote[1]);
+      if (!parsed.text) {
+        return { handled: true, reply: "Quote text is required. Example: Add quote \"Discipline over mood\" by You in section Motivation" };
+      }
+
+      const targetSection = ensureLearningSectionByName(parsed.sectionName || "General");
+      state.quotes.push({
+        id: `quote-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+        text: parsed.text,
+        author: parsed.author,
+        sectionId: targetSection.id,
+        colorSeed: generateQuoteColorSeed(parsed.text, parsed.author),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      saveQuotes();
+      renderLearningSections();
+      if (state.currentView === "quotes") {
+        renderQuotes();
+      }
+      return { handled: true, reply: `Added quote in "${targetSection.name}".` };
+    }
+
+    const deleteQuote = prompt.match(/^(?:delete|remove)\s+quote\s+(.+)$/i);
+    if (deleteQuote) {
+      const needle = sanitizeText(stripOuterQuotes(deleteQuote[1])).toLowerCase();
+      const quote = state.quotes.find((item) => sanitizeText(item.text).toLowerCase().includes(needle));
+      if (!quote) {
+        return { handled: true, reply: `Quote not found for "${needle}".` };
+      }
+      await removeQuote(quote.id, true);
+      return { handled: true, reply: "Quote deleted." };
+    }
+
+    const setName = prompt.match(/^(?:set|update|change)\s+(?:my\s+)?name(?:\s+to)?\s+(.+)$/i) || prompt.match(/^my\s+name\s+is\s+(.+)$/i);
+    if (setName) {
+      const nextName = sanitizeText(stripOuterQuotes(setName[1]));
+      if (!nextName) {
+        return { handled: true, reply: "Name cannot be empty." };
+      }
+      state.profile.fullName = nextName;
+      if (state.account.created) {
+        state.account.name = nextName;
+        state.account.lastLoginAt = new Date().toISOString();
+        saveUserAccount();
+      }
+      saveProfile();
+      applyProfileToUI();
+      return { handled: true, reply: `Profile name updated to "${nextName}".` };
+    }
+
+    const setEmail = prompt.match(/^(?:set|update|change)\s+(?:my\s+)?email(?:\s+to)?\s+(.+)$/i);
+    if (setEmail) {
+      const nextEmail = sanitizeText(stripOuterQuotes(setEmail[1])).toLowerCase();
+      if (!EMAIL_PATTERN.test(nextEmail)) {
+        return { handled: true, reply: "Email format looks invalid." };
+      }
+      state.profile.email = nextEmail;
+      saveProfile();
+      applyProfileToUI();
+      return { handled: true, reply: `Email updated to ${nextEmail}.` };
+    }
+
+    const setPhone = prompt.match(/^(?:set|update|change)\s+(?:my\s+)?phone(?:\s+to)?\s+(.+)$/i);
+    if (setPhone) {
+      const nextPhone = sanitizeText(stripOuterQuotes(setPhone[1]));
+      if (!PHONE_PATTERN.test(nextPhone)) {
+        return { handled: true, reply: "Phone format looks invalid." };
+      }
+      state.profile.phone = nextPhone;
+      saveProfile();
+      applyProfileToUI();
+      return { handled: true, reply: `Phone updated to ${nextPhone}.` };
+    }
+
+    const setCity = prompt.match(/^(?:set|update|change)\s+(?:my\s+)?city(?:\s+to)?\s+(.+)$/i);
+    if (setCity) {
+      const nextCity = sanitizeText(stripOuterQuotes(setCity[1]));
+      state.profile.city = nextCity;
+      saveProfile();
+      applyProfileToUI();
+      return { handled: true, reply: `City updated to ${nextCity}.` };
+    }
+
+    const setBio = prompt.match(/^(?:set|update|change)\s+(?:my\s+)?bio(?:\s+to)?\s+(.+)$/i);
+    if (setBio) {
+      const nextBio = sanitizeText(stripOuterQuotes(setBio[1])).slice(0, 220);
+      state.profile.bio = nextBio;
+      saveProfile();
+      applyProfileToUI();
+      return { handled: true, reply: "Bio updated." };
+    }
+
+    const capabilityQuery = lower.includes("what can you do") || lower.includes("app access") || lower === "help";
+    if (capabilityQuery) {
+      return {
+        handled: true,
+        reply: [
+          "I can control TaskX directly.",
+          "Commands:",
+          "- Add/Create/Delete/Rename task",
+          "- Mark complete task <name>",
+          "- Add/Create/Delete quote",
+          "- Add/Create/Rename/Delete section",
+          "- Set my name/email/phone/city/bio",
+          "- Open today / learning / quotes / upcoming / bot"
+        ].join("\n")
+      };
+    }
+
+    return { handled: false, reply: "" };
+  }
+
+  function removeLearningSectionImmediate(sectionId) {
+    state.learningSections = state.learningSections.filter((item) => item.id !== sectionId);
+    state.quotes = state.quotes.filter((item) => item.sectionId !== sectionId);
+    if (state.learningSectionIgnoreClickId === sectionId) {
+      state.learningSectionIgnoreClickId = "";
+    }
+    if (state.activeLearningSectionId === sectionId) {
+      state.activeLearningSectionId = "";
+    }
+    autoAlignLearningSections(false);
+    saveLearningSections();
+    saveQuotes();
+    renderLearningSections();
+    renderQuotes();
+  }
+
+  function findTaskByTitle(title) {
+    const query = normalizeMatchText(title);
+    if (!query) return null;
+    return state.scheduleItems.find((item) => normalizeMatchText(item.title) === query)
+      || state.scheduleItems.find((item) => normalizeMatchText(item.title).includes(query))
+      || null;
+  }
+
+  function findLearningSectionByName(name) {
+    const query = normalizeMatchText(name);
+    if (!query) return null;
+    return state.learningSections.find((item) => normalizeMatchText(item.name) === query)
+      || state.learningSections.find((item) => normalizeMatchText(item.name).includes(query))
+      || null;
+  }
+
+  function ensureLearningSectionByName(name) {
+    const nextName = sanitizeText(name).slice(0, 28) || "General";
+    const existing = findLearningSectionByName(nextName);
+    if (existing) {
+      return existing;
+    }
+
+    const id = `section-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    const bounds = getLearningSectionBounds();
+    const layout = getDefaultLearningSectionPlacement(state.learningSections.length, bounds);
+    const created = { id, name: nextName, x: layout.x, y: layout.y, size: layout.size };
+    state.learningSections.push(created);
+    autoAlignLearningSections(false);
+    saveLearningSections();
+    renderLearningSections();
+    return created;
+  }
+
+  function parseTaskCreatePayload(raw) {
+    const text = sanitizeText(raw);
+    const timeRange = extractTimeRange(text) || "08:00 - 09:00";
+    const tagClass = detectTaskTagClass(text);
+    let title = text
+      .replace(/\bat\s+\d{1,2}:\d{2}\s*(?:am|pm)?\s*-\s*\d{1,2}:\d{2}\s*(?:am|pm)?/i, "")
+      .replace(/\b(?:category|tag)\s+(learning|fitness|work|language|general)\b/i, "")
+      .replace(/^[|:\-]+/, "")
+      .trim();
+    title = stripOuterQuotes(title);
+    return { title: sanitizeText(title), time: timeRange, tagClass };
+  }
+
+  function parseQuoteCreatePayload(raw) {
+    const text = sanitizeText(raw);
+    const sectionMatch = text.match(/\bin\s+section\s+(.+)$/i);
+    const sectionName = sectionMatch ? sanitizeText(stripOuterQuotes(sectionMatch[1])) : "";
+    const withoutSection = sectionMatch ? sanitizeText(text.slice(0, sectionMatch.index)) : text;
+    const byMatch = withoutSection.match(/\s+by\s+(.+)$/i);
+    const author = byMatch ? sanitizeText(stripOuterQuotes(byMatch[1])) : "";
+    const quoteTextRaw = byMatch ? sanitizeText(withoutSection.slice(0, byMatch.index)) : withoutSection;
+    const quoteText = sanitizeText(stripOuterQuotes(quoteTextRaw));
+    return { text: quoteText, author, sectionName };
+  }
+
+  function detectTaskTagClass(text) {
+    const lower = sanitizeText(text).toLowerCase();
+    if (lower.includes("fitness") || lower.includes("gym")) return "fitness";
+    if (lower.includes("work") || lower.includes("project")) return "work";
+    if (lower.includes("language") || lower.includes("spanish")) return "language";
+    if (lower.includes("general")) return "general";
+    return "learning";
+  }
+
+  function extractTimeRange(text) {
+    const match = sanitizeText(text).match(/(\d{1,2}:\d{2}\s*(?:am|pm)?)\s*-\s*(\d{1,2}:\d{2}\s*(?:am|pm)?)/i);
+    if (!match) {
+      return "";
+    }
+    const start = parseClockTo24(match[1]);
+    const end = parseClockTo24(match[2]);
+    if (!start || !end) return "";
+    return `${start} - ${end}`;
+  }
+
+  function parseClockTo24(value) {
+    const match = sanitizeText(value).match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+    if (!match) return "";
+    let hour = Number.parseInt(match[1], 10);
+    const minute = Number.parseInt(match[2], 10);
+    const meridiem = (match[3] || "").toLowerCase();
+    if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return "";
+    }
+    if (meridiem) {
+      if (hour === 12) hour = 0;
+      if (meridiem === "pm") hour += 12;
+    }
+    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  }
+
+  function stripOuterQuotes(value) {
+    const text = sanitizeText(value);
+    return text.replace(/^["'`“”]+|["'`“”]+$/g, "");
+  }
+
+  function normalizeMatchText(value) {
+    return sanitizeText(value).toLowerCase().replace(/\s+/g, " ");
+  }
+
   async function onBotComposerSubmit(event) {
     event.preventDefault();
 
@@ -3423,7 +3963,32 @@
     updateBotMemoryFromPrompt(composedPrompt);
     saveBotMemory();
 
+    if (state.botEditTargetId) {
+      const editIndex = state.botMessages.findIndex(
+        (message) => message.id === state.botEditTargetId && message.role === "user"
+      );
+      if (editIndex >= 0) {
+        // Replace from edited question onward so regenerated answer stays consistent.
+        state.botMessages = state.botMessages.slice(0, editIndex);
+      }
+      state.botEditTargetId = "";
+    }
+    closeBotPromptMenu();
+    clearBotMessageLongPressTimer();
+
     state.botMessages.push(createBotMessage("user", composedPrompt, "local"));
+    const appAction = await tryHandleBotAppAction(composedPrompt);
+    if (appAction.handled) {
+      state.botMessages.push(createBotMessage("assistant", appAction.reply, "TaskX control"));
+      saveBotMessages();
+      renderBotMessages();
+      renderBotHistoryList();
+      dom.botPromptInput.value = "";
+      clearBotAttachment();
+      autoResizeBotPrompt();
+      return;
+    }
+
     state.botMessages.push(createBotMessage("assistant", "Thinking...", "", true));
     saveBotMessages();
     renderBotMessages();
@@ -3501,96 +4066,122 @@
   
 
   async function requestBotResponse(conversationMessages, abortSignal) {
-    if (state.botSettings.provider === "huggingface") {
-      return queryHuggingFaceChat(conversationMessages, abortSignal);
-    }
-    return queryOllamaChat(conversationMessages, abortSignal);
+    return queryGeminiChat(conversationMessages, abortSignal);
   }
 
-  async function queryOllamaChat(messages, abortSignal) {
-    const endpoint = sanitizeText(state.botSettings.endpoint) || OLLAMA_DEFAULT_ENDPOINT;
-    const model = sanitizeText(state.botSettings.model) || DEFAULT_BOT_SETTINGS.model;
-    const apiKey = sanitizeText(state.botSettings.apiKey);
-
-    const headers = {
-      "Content-Type": "application/json"
-    };
-    if (apiKey) {
-      headers.Authorization = `Bearer ${apiKey}`;
-    }
-
-    const response = await fetchWithTimeout(endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model,
-        stream: false,
-        messages,
-        options: {
-          temperature: 0.4
-        }
-      }),
-      signal: abortSignal
-    });
-
-    if (!response.ok) {
-      const details = await response.text();
-      throw new Error(`Ollama request failed (${response.status}). ${details.slice(0, 180)}`);
-    }
-
-    const data = await response.json();
-    const text = sanitizeText(data?.message?.content || data?.response || "");
-
-    if (!text) {
-      throw new Error("Ollama returned an empty response.");
-    }
-
-    return {
-      text,
-      source: `${model} via Ollama`
-    };
-  }
-
-  async function queryHuggingFaceChat(messages, abortSignal) {
-    const endpoint = sanitizeText(state.botSettings.endpoint) || HUGGINGFACE_CHAT_ENDPOINT;
-    const model = sanitizeText(state.botSettings.model) || "meta-llama/Llama-3.2-3B-Instruct";
-    const apiKey = sanitizeText(state.botSettings.apiKey);
-
+  async function queryGeminiChat(messages, abortSignal) {
+    const endpoint = sanitizeText(state.botSettings.endpoint) || GEMINI_CHAT_ENDPOINT;
+    const configuredModel = sanitizeText(state.botSettings.model) || DEFAULT_BOT_SETTINGS.model;
+    const apiKey = sanitizeText(state.botSettings.apiKey) || BOT_FIXED_FREE_API_KEY;
     if (!apiKey) {
-      throw new Error("Hugging Face API key is missing.");
+      throw new Error("Gemini API key is missing.");
     }
 
-    const response = await fetchWithTimeout(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`
+    const [systemMessage, ...historyMessages] = Array.isArray(messages) ? messages : [];
+    const contents = historyMessages
+      .filter((item) => item && typeof item === "object" && sanitizeText(item.content))
+      .map((item) => ({
+        role: item.role === "assistant" ? "model" : "user",
+        parts: [{ text: sanitizeText(item.content) }]
+      }));
+
+    const systemPrompt = sanitizeText(systemMessage?.content) || DEFAULT_BOT_SETTINGS.systemPrompt;
+    const payloadPrimary = {
+      systemInstruction: {
+        parts: [{ text: systemPrompt }]
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        max_tokens: 500,
-        temperature: 0.4
-      }),
-      signal: abortSignal
-    });
-
-    if (!response.ok) {
-      const details = await response.text();
-      throw new Error(`Hugging Face request failed (${response.status}). ${details.slice(0, 180)}`);
-    }
-
-    const data = await response.json();
-    const text = sanitizeText(data?.choices?.[0]?.message?.content || "");
-
-    if (!text) {
-      throw new Error("Hugging Face returned an empty response.");
-    }
-
-    return {
-      text,
-      source: `${model} via Hugging Face`
+      contents: contents.length ? contents : [{ role: "user", parts: [{ text: "Hello" }] }],
+      generationConfig: {
+        temperature: 0.4,
+        maxOutputTokens: 700
+      }
     };
+    const payloadCompat = {
+      system_instruction: {
+        parts: [{ text: systemPrompt }]
+      },
+      contents: payloadPrimary.contents,
+      generation_config: {
+        temperature: 0.4,
+        max_output_tokens: 700
+      }
+    };
+
+    const urls = buildGeminiCandidateUrls(endpoint, configuredModel, apiKey);
+    const payloads = [payloadPrimary, payloadCompat];
+    let lastError = "";
+
+    for (const urlInfo of urls) {
+      for (const payload of payloads) {
+        const response = await fetchWithTimeout(urlInfo.url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey
+          },
+          body: JSON.stringify(payload),
+          signal: abortSignal
+        });
+
+        if (!response.ok) {
+          const details = await response.text();
+          lastError = `Gemini request failed (${response.status}) for ${urlInfo.model}. ${details.slice(0, 220)}`;
+          continue;
+        }
+
+        const data = await response.json();
+        const text = readGeminiResponseText(data);
+        if (text) {
+          return {
+            text,
+            source: urlInfo.model
+          };
+        }
+
+        lastError = `Gemini returned empty response for ${urlInfo.model}.`;
+      }
+    }
+
+    throw new Error(lastError || "Gemini request failed.");
+  }
+
+  function buildGeminiCandidateUrls(endpoint, model, apiKey) {
+    const cleanEndpoint = sanitizeText(endpoint).replace(/\?key=.*$/i, "");
+    const modelCandidates = [model, "gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash"]
+      .map((item) => sanitizeText(item))
+      .filter(Boolean)
+      .filter((item, index, arr) => arr.indexOf(item) === index);
+
+    const urls = [];
+    for (const modelName of modelCandidates) {
+      let baseUrl = cleanEndpoint;
+      if (/:generateContent$/i.test(baseUrl)) {
+        const replaced = baseUrl.replace(/models\/[^/:]+:generateContent/i, `models/${encodeURIComponent(modelName)}:generateContent`);
+        baseUrl = replaced;
+      } else if (/\/models$/i.test(baseUrl)) {
+        baseUrl = `${baseUrl}/${encodeURIComponent(modelName)}:generateContent`;
+      } else if (/\/models\//i.test(baseUrl)) {
+        baseUrl = `${baseUrl}:generateContent`;
+      } else {
+        baseUrl = `${GEMINI_CHAT_ENDPOINT}/${encodeURIComponent(modelName)}:generateContent`;
+      }
+
+      const separator = baseUrl.includes("?") ? "&" : "?";
+      const fullUrl = `${baseUrl}${separator}key=${encodeURIComponent(apiKey)}`;
+      if (!urls.some((item) => item.url === fullUrl)) {
+        urls.push({ model: modelName, url: fullUrl });
+      }
+    }
+    return urls;
+  }
+
+  function readGeminiResponseText(data) {
+    return sanitizeText(
+      (data?.candidates?.[0]?.content?.parts || [])
+        .map((part) => sanitizeText(part?.text))
+        .filter(Boolean)
+        .join("\n")
+    );
   }
 
   async function fetchWithTimeout(input, init = {}) {
@@ -3773,20 +4364,10 @@
   }
 
   function getDefaultBotSettingsForProvider(provider) {
-    if (provider === "huggingface") {
-      return {
-        provider: "huggingface",
-        model: "meta-llama/Llama-3.2-3B-Instruct",
-        endpoint: HUGGINGFACE_CHAT_ENDPOINT,
-        apiKey: BOT_FIXED_FREE_API_KEY,
-        systemPrompt: DEFAULT_BOT_SETTINGS.systemPrompt
-      };
-    }
-
     return {
-      provider: "huggingface",
+      provider: "gemini",
       model: DEFAULT_BOT_SETTINGS.model,
-      endpoint: HUGGINGFACE_CHAT_ENDPOINT,
+      endpoint: GEMINI_CHAT_ENDPOINT,
       apiKey: BOT_FIXED_FREE_API_KEY,
       systemPrompt: DEFAULT_BOT_SETTINGS.systemPrompt
     };

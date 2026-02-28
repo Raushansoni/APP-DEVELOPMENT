@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Roboto+Flex:opsz,wght@8..144,600&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@1" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
-  <script src="app.js" defer></script>
+  <link rel="stylesheet" href="styles.css?v=20260228-live-01">
+  <script src="app.js?v=20260228-live-01" defer></script>
 </head>
 <body>
   <div class="cinematic-glow glow-left" aria-hidden="true"></div>
@@ -370,18 +370,17 @@
           <form class="bot-settings-form" id="botSettingsForm" novalidate>
             <label for="botProvider">Provider</label>
             <select id="botProvider" name="botProvider">
-              <option value="ollama">Ollama (Local, Free)</option>
-              <option value="huggingface">Hugging Face (Free Token)</option>
+              <option value="gemini">Gemini</option>
             </select>
 
             <label for="botModel">Model</label>
-            <input id="botModel" name="botModel" type="text" maxlength="120" placeholder="llama3.2:3b" required>
+            <input id="botModel" name="botModel" type="text" maxlength="120" placeholder="gemini-2.5-flash" required>
 
             <label for="botEndpoint">Endpoint URL</label>
-            <input id="botEndpoint" name="botEndpoint" type="url" maxlength="240" placeholder="http://10.0.2.2:11434/api/chat" required>
+            <input id="botEndpoint" name="botEndpoint" type="url" maxlength="240" placeholder="https://generativelanguage.googleapis.com/v1beta/models" required>
 
             <label for="botApiKey">API Key (if required)</label>
-            <input id="botApiKey" name="botApiKey" type="password" maxlength="220" autocomplete="off" placeholder="Optional for Ollama">
+            <input id="botApiKey" name="botApiKey" type="password" maxlength="220" autocomplete="off" placeholder="AIza...">
 
             <p id="botProviderHint" class="profile-hint"></p>
             <p id="botSettingsFeedback" class="profile-feedback" aria-live="polite"></p>
@@ -395,6 +394,12 @@
 
         <section class="bot-chat-card" aria-label="Bot chat">
           <ul class="bot-message-list" id="botMessageList"></ul>
+          <div class="bot-prompt-menu" id="botPromptMenu" hidden>
+            <button class="bot-prompt-menu-item" id="botPromptMenuEdit" type="button">
+              <span class="material-symbols-rounded" aria-hidden="true">edit</span>
+              <span>Edit</span>
+            </button>
+          </div>
 
           <form class="bot-composer-form" id="botComposerForm" novalidate>
             <label class="sr-only" for="botPromptInput">Message</label>
