@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.GeolocationPermissions
+import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -33,6 +34,10 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
 class MainActivity : AppCompatActivity() {
+  private class TaskXNativeConfigBridge {
+    @JavascriptInterface
+    fun getGeminiApiKey(): String = BuildConfig.GEMINI_API_KEY
+  }
 
   private data class PendingGeoRequest(
     val origin: String,
@@ -187,6 +192,7 @@ class MainActivity : AppCompatActivity() {
 
     val debuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     WebView.setWebContentsDebuggingEnabled(debuggable)
+    webView.addJavascriptInterface(TaskXNativeConfigBridge(), "TaskXNativeConfig")
   }
 
   private fun ensureFilePermissions(): Boolean {

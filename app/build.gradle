@@ -21,6 +21,13 @@ def envOrProp = { String key, String fallback = "" ->
   return fallback
 }
 
+def quoteForBuildConfig = { String value ->
+  def sanitized = (value ?: "")
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+  return "\"${sanitized}\""
+}
+
 def envVar = { String key -> (System.getenv(key) ?: "").trim() }
 
 def hasReleaseSigning = ["KEYSTORE_PATH", "KEYSTORE_PASSWORD", "KEY_ALIAS", "KEY_PASSWORD"].every { key ->
@@ -41,6 +48,7 @@ android {
 
     buildConfigField "String", "WEB_START_URL", "\"${envOrProp("WEB_START_URL", "file:///android_asset/web/index.html")}\""
     buildConfigField "String", "API_BASE_URL", "\"${envOrProp("API_BASE_URL", "https://text.pollinations.ai/openai")}\""
+    buildConfigField "String", "GEMINI_API_KEY", quoteForBuildConfig(envOrProp("GEMINI_API_KEY", ""))
     buildConfigField "boolean", "ENABLE_STRICT_MODE", "true"
   }
 

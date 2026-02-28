@@ -35,7 +35,7 @@
 
   const GEMINI_CHAT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
   const BOT_MAX_CONTEXT_MESSAGES = 12;
-  const BOT_FIXED_FREE_API_KEY = "AIzaSyB0Atad0FOqzeIfp0huF8IW5IyW_EVvv9c";
+  const BOT_FIXED_FREE_API_KEY = getNativeGeminiApiKey();
   const BOT_REQUEST_TIMEOUT_MS = 35000;
   const BOT_REPLY_SOUND_PATH = "media/pikachu_reply.mp3";
   const THEME_REVEAL_DURATION_MS = 170;
@@ -147,6 +147,17 @@
     apiKey: BOT_FIXED_FREE_API_KEY,
     systemPrompt: "You are Pikachu. Keep responses concise, practical, and action-oriented for personal scheduling and learning."
   };
+
+  function getNativeGeminiApiKey() {
+    try {
+      if (!window.TaskXNativeConfig || typeof window.TaskXNativeConfig.getGeminiApiKey !== "function") {
+        return "";
+      }
+      return sanitizeText(window.TaskXNativeConfig.getGeminiApiKey());
+    } catch (_) {
+      return "";
+    }
+  }
 
   const state = {
     size: "compact",
